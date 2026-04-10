@@ -109,7 +109,11 @@ runs:
           rsync \
           unzip \
           wget \
-          zstd
+          zstd \
+          libboost-dev \
+          libpcre2-dev \
+          libjson-c-dev \
+          perl
 
     - name: Restore SDK cache
       id: cache-sdk
@@ -193,7 +197,7 @@ runs:
 
         make package/${{ inputs.package-name }}/clean || true
         make package/${{ inputs.package-name }}/compile -j"$jobs" \
-          || make package/${{ inputs.package-name }}/compile -j1
+          || make package/${{ inputs.package-name }}/compile -j1 V=s
 
     - name: Collect package files
       shell: bash
