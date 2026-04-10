@@ -11,8 +11,9 @@ inputs:
     description: OpenWrt package name (for example luci-app-3ginfo-lite)
     required: true
   package-dir:
-    description: Relative path to the package directory in the caller repository
-    required: true
+    description: Relative path to the package directory in the caller repository (defaults to package-name when empty)
+    required: false
+    default: ""
   sdk-version:
     description: OpenWrt release version (for example 24.10.5)
     required: true
@@ -150,9 +151,20 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        src_dir="${{ inputs.package-dir }}"
+        if [ -z "$src_dir" ]; then
+          src_dir="${{ inputs.package-name }}"
+        fi
+
+        if [ ! -d "$GITHUB_WORKSPACE/$src_dir" ]; then
+          echo "Package directory not found: $GITHUB_WORKSPACE/$src_dir"
+          echo "Set 'package-dir' input correctly or ensure it matches 'package-name'."
+          exit 1
+        fi
+
         mkdir -p "${{ steps.paths.outputs.sdk_dir }}/package/${{ inputs.package-name }}"
         rsync -a --delete \
-          "$GITHUB_WORKSPACE/${{ inputs.package-dir }}/" \
+          "$GITHUB_WORKSPACE/$src_dir/" \
           "${{ steps.paths.outputs.sdk_dir }}/package/${{ inputs.package-name }}/"
 
     - name: Configure SDK

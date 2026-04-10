@@ -14,7 +14,7 @@ Reusable public GitHub Action to build OpenWrt packages with the OpenWrt SDK.
 ## Inputs
 
 - `package-name` (required): OpenWrt package name
-- `package-dir` (required): Path to package directory in caller repo
+- `package-dir` (optional): Path to package directory in caller repo (defaults to `package-name`)
 - `sdk-version` (required): OpenWrt release version (example `24.10.5`)
 - `sdk-target` (default: `x86`): OpenWrt target path segment
 - `sdk-subtarget` (default: `64`): OpenWrt subtarget path segment
@@ -58,12 +58,11 @@ jobs:
       - name: Build package
         uses: nooblk-98/openwrt-package-compile-action@v1
         with:
-          package-name: luci-app-3ginfo-lite
-          package-dir: luci-app-3ginfo-lite
+          package-name: luci-app-netstat
           sdk-version: ${{ matrix.sdk_version }}
           sdk-target: x86
           sdk-subtarget: "64"
-          artifact-name: luci-app-3ginfo-lite-${{ matrix.sdk_version }}
+          artifact-name: luci-app-netstat-${{ matrix.sdk_version }}
 ```
 
 ## Publish as public action
@@ -75,8 +74,19 @@ jobs:
 
 The file `.github/workflows/publish_marketplace.yml` is an example CI workflow that uses this action from the same repo.
 
-## Notes
+## Available Input Options
 
-- Reference example:
-  - `uses: nooblk-98/openwrt-package-compile-action@v1`
-- Always use the latest release tag available in this repository (update the tag when a new version is released).
+- `package-name`
+- `package-dir`
+- `sdk-version`
+- `sdk-target`
+- `sdk-subtarget`
+- `sdk-url-override`
+- `sdk-cache-key-override`
+- `feeds-update`
+- `feeds-install`
+- `feeds-install-all-from`
+- `artifact-name`
+- `upload-artifact`
+- `retention-days`
+- `make-jobs`
