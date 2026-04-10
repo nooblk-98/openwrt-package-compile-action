@@ -33,8 +33,6 @@ def main() -> None:
     parser.add_argument("--sdk-dir", required=True)
     parser.add_argument("--pkg-name", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--extensions", nargs="+", required=True)
-    parser.add_argument("--required-ext", required=True)
     parser.add_argument("--label", required=True)
     args = parser.parse_args()
 
@@ -42,13 +40,15 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    files = collect_candidates(sdk_dir, args.pkg_name, args.extensions)
+    extensions = ["ipk", "apk"]
+    files = collect_candidates(sdk_dir, args.pkg_name, extensions)
     for src in files:
         shutil.copy2(src, output_dir / src.name)
 
-    required = list(output_dir.glob(f"*.{args.required_ext}"))
-    if not required:
-        print(f"No .{args.required_ext} package was produced for {args.label}")
+    ipk_files = list(output_dir.glob("*.ipk"))
+    apk_files = list(output_dir.glob("*.apk"))
+    if not ipk_files and not apk_files:
+        print(f"No .ipk or .apk package was produced for {args.label}")
         print("Debug: available files from SDK output path")
         packages_dir = sdk_dir / "bin" / "packages"
         if packages_dir.exists():
@@ -57,6 +57,7 @@ def main() -> None:
                     break
                 print(path)
         raise SystemExit(1)
+    print(f"Found {len(ipk_files)} ipk file(s) and {len(apk_files)} apk file(s).")
 
     print(f"Collected files in {output_dir}:")
     for path in sorted(output_dir.glob("*")):

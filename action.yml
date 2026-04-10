@@ -32,14 +32,6 @@ inputs:
     description: Optional explicit SDK cache key override
     required: false
     default: ""
-  output-extensions:
-    description: Space-separated package extensions to collect
-    required: false
-    default: ipk
-  required-extension:
-    description: Required extension that must exist, or the action fails
-    required: false
-    default: ipk
   feeds-update:
     description: Space-separated feeds to update
     required: false
@@ -199,8 +191,6 @@ runs:
           --sdk-dir "${{ steps.paths.outputs.sdk_dir }}" \
           --pkg-name "${{ inputs.package-name }}" \
           --output-dir "${{ steps.paths.outputs.artifact_dir }}" \
-          --extensions ${{ inputs.output-extensions }} \
-          --required-ext "${{ inputs.required-extension }}" \
           --label "${{ inputs.package-name }}"
 
     - name: Upload artifact

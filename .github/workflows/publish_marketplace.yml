@@ -60,14 +60,8 @@ jobs:
         include:
           - label: IPK (OpenWrt 24.10.5)
             sdk_version: 24.10.5
-            output_extensions: ipk
-            required_extension: ipk
-            artifact_suffix: ipk
           - label: APK (OpenWrt 25.12.1)
             sdk_version: 25.12.1
-            output_extensions: apk ipk
-            required_extension: apk
-            artifact_suffix: apk
 
     steps:
       - name: Checkout source
@@ -81,12 +75,10 @@ jobs:
           sdk-version: ${{ matrix.sdk_version }}
           sdk-target: x86
           sdk-subtarget: "64"
-          output-extensions: ${{ matrix.output_extensions }}
-          required-extension: ${{ matrix.required_extension }}
           feeds-update: packages luci
           feeds-install-all-from: luci
           feeds-install: comgt sms-tool
-          artifact-name: ${{ env.PACKAGE_NAME }}-${{ needs.meta.outputs.pkg_version }}-${{ matrix.artifact_suffix }}
+          artifact-name: ${{ env.PACKAGE_NAME }}-${{ needs.meta.outputs.pkg_version }}-${{ matrix.sdk_version }}
           upload-artifact: "true"
 
   release:

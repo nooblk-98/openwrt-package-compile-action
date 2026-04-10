@@ -20,8 +20,6 @@ Reusable public GitHub Action to build OpenWrt packages with the OpenWrt SDK.
 - `sdk-subtarget` (default: `64`): OpenWrt subtarget path segment
 - `sdk-url-override` (default: empty): Optional explicit SDK URL
 - `sdk-cache-key-override` (default: empty): Optional explicit cache key
-- `output-extensions` (default: `ipk`): Space-separated extensions to collect
-- `required-extension` (default: `ipk`): Required extension; action fails if missing
 - `feeds-update` (default: `packages luci`): Space-separated feeds to update
 - `feeds-install-all-from` (default: `luci`): Feeds to install all packages from
 - `feeds-install` (default: `comgt sms-tool`): Specific feed packages to install
@@ -51,12 +49,8 @@ jobs:
         include:
           - label: IPK
             sdk_version: 24.10.5
-            output_extensions: ipk
-            required_extension: ipk
           - label: APK
             sdk_version: 25.12.1
-            output_extensions: apk ipk
-            required_extension: apk
 
     steps:
       - uses: actions/checkout@v4
@@ -69,9 +63,7 @@ jobs:
           sdk-version: ${{ matrix.sdk_version }}
           sdk-target: x86
           sdk-subtarget: "64"
-          output-extensions: ${{ matrix.output_extensions }}
-          required-extension: ${{ matrix.required_extension }}
-          artifact-name: luci-app-3ginfo-lite-${{ matrix.required_extension }}
+          artifact-name: luci-app-3ginfo-lite-${{ matrix.sdk_version }}
 ```
 
 ## Publish as public action
