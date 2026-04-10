@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build package
-        uses: YOUR_ORG/openwrt-package-compile-action@v1
+        uses: nooblk-98/openwrt-package-compile-action@v1
         with:
           package-name: luci-app-3ginfo-lite
           package-dir: luci-app-3ginfo-lite
@@ -70,7 +70,13 @@ jobs:
 
 1. Push this repository to GitHub as public.
 2. Create a tag (example `v1`).
-3. Reference it from other repos as `OWNER/REPO@v1`.
+3. Reference it from other repos as `nooblk-98/openwrt-package-compile-action@v1`.
 4. For updates, move major tag to latest compatible release (example `v1`).
 
 The file `.github/workflows/publish_marketplace.yml` is an example CI workflow that uses this action from the same repo.
+
+## Notes
+
+- Reference example:
+  - `uses: nooblk-98/openwrt-package-compile-action@v1`
+- Always use the latest release tag available in this repository (update the tag when a new version is released).
