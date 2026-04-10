@@ -15,8 +15,11 @@ Reusable public GitHub Action to build OpenWrt packages with the OpenWrt SDK.
 
 - `package-name` (required): OpenWrt package name
 - `package-dir` (required): Path to package directory in caller repo
-- `sdk-url` (required): OpenWrt SDK archive URL
-- `sdk-cache-key` (required): Cache key suffix (example `24.10.5-x86-64-ipk-v1`)
+- `sdk-version` (required): OpenWrt release version (example `24.10.5`)
+- `sdk-target` (default: `x86`): OpenWrt target path segment
+- `sdk-subtarget` (default: `64`): OpenWrt subtarget path segment
+- `sdk-url-override` (default: empty): Optional explicit SDK URL
+- `sdk-cache-key-override` (default: empty): Optional explicit cache key
 - `output-extensions` (default: `ipk`): Space-separated extensions to collect
 - `required-extension` (default: `ipk`): Required extension; action fails if missing
 - `feeds-update` (default: `packages luci`): Space-separated feeds to update
@@ -47,10 +50,13 @@ jobs:
       matrix:
         include:
           - label: IPK
-            sdk_cache_key: 24.10.5-x86-64-ipk-v1
-            sdk_url: https://archive.openwrt.org/releases/24.10.5/targets/x86/64/openwrt-sdk-24.10.5-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+            sdk_version: 24.10.5
             output_extensions: ipk
             required_extension: ipk
+          - label: APK
+            sdk_version: 25.12.1
+            output_extensions: apk ipk
+            required_extension: apk
 
     steps:
       - uses: actions/checkout@v4
@@ -60,8 +66,9 @@ jobs:
         with:
           package-name: luci-app-3ginfo-lite
           package-dir: luci-app-3ginfo-lite
-          sdk-url: ${{ matrix.sdk_url }}
-          sdk-cache-key: ${{ matrix.sdk_cache_key }}
+          sdk-version: ${{ matrix.sdk_version }}
+          sdk-target: x86
+          sdk-subtarget: "64"
           output-extensions: ${{ matrix.output_extensions }}
           required-extension: ${{ matrix.required_extension }}
           artifact-name: luci-app-3ginfo-lite-${{ matrix.required_extension }}

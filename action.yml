@@ -13,12 +13,25 @@ inputs:
   package-dir:
     description: Relative path to the package directory in the caller repository
     required: true
-  sdk-url:
-    description: Full OpenWrt SDK tar.zst URL
+  sdk-version:
+    description: OpenWrt release version (for example 24.10.5)
     required: true
-  sdk-cache-key:
-    description: Cache key suffix for SDK reuse
-    required: true
+  sdk-target:
+    description: OpenWrt target in archive path
+    required: false
+    default: x86
+  sdk-subtarget:
+    description: OpenWrt subtarget in archive path
+    required: false
+    default: "64"
+  sdk-url-override:
+    description: Optional explicit SDK URL override
+    required: false
+    default: ""
+  sdk-cache-key-override:
+    description: Optional explicit SDK cache key override
+    required: false
+    default: ""
   output-extensions:
     description: Space-separated package extensions to collect
     required: false
@@ -64,13 +77,26 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve SDK URL
+      id: sdk
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/scripts/resolve_sdk_url.py" \
+          --sdk-version "${{ inputs.sdk-version }}" \
+          --sdk-target "${{ inputs.sdk-target }}" \
+          --sdk-subtarget "${{ inputs.sdk-subtarget }}" \
+          --sdk-url-override "${{ inputs.sdk-url-override }}" \
+          --sdk-cache-key-override "${{ inputs.sdk-cache-key-override }}" \
+          --github-output "$GITHUB_OUTPUT"
+
     - name: Set internal paths
       id: paths
       shell: bash
       run: |
         set -euo pipefail
-        echo "sdk_dir=$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}" >> "$GITHUB_OUTPUT"
-        echo "artifact_dir=$RUNNER_TEMP/openwrt-out-${{ inputs.sdk-cache-key }}" >> "$GITHUB_OUTPUT"
+        echo "sdk_dir=$RUNNER_TEMP/openwrt-sdk-${{ steps.sdk.outputs.sdk_cache_key }}" >> "$GITHUB_OUTPUT"
+        echo "artifact_dir=$RUNNER_TEMP/openwrt-out-${{ steps.sdk.outputs.sdk_cache_key }}" >> "$GITHUB_OUTPUT"
 
     - name: Install build dependencies
       shell: bash
@@ -97,16 +123,16 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ steps.paths.outputs.sdk_dir }}
-        key: openwrt-sdk-${{ inputs.sdk-cache-key }}
+        key: openwrt-sdk-${{ steps.sdk.outputs.sdk_cache_key }}
 
     - name: Download SDK
       if: steps.cache-sdk.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
-        wget -q "${{ inputs.sdk-url }}" -O "$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}.tar.zst"
+        wget -q "${{ steps.sdk.outputs.sdk_url }}" -O "$RUNNER_TEMP/openwrt-sdk-${{ steps.sdk.outputs.sdk_cache_key }}.tar.zst"
         mkdir -p "${{ steps.paths.outputs.sdk_dir }}"
-        tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}.tar.zst" \
+        tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk-${{ steps.sdk.outputs.sdk_cache_key }}.tar.zst" \
           -C "${{ steps.paths.outputs.sdk_dir }}" --strip-components=1
 
     - name: Update feeds

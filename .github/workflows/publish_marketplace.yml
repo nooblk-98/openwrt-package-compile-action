@@ -59,14 +59,12 @@ jobs:
       matrix:
         include:
           - label: IPK (OpenWrt 24.10.5)
-            sdk_cache_key: 24.10.5-x86-64-ipk-v1
-            sdk_url: https://archive.openwrt.org/releases/24.10.5/targets/x86/64/openwrt-sdk-24.10.5-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+            sdk_version: 24.10.5
             output_extensions: ipk
             required_extension: ipk
             artifact_suffix: ipk
           - label: APK (OpenWrt 25.12.1)
-            sdk_cache_key: 25.12.1-x86-64-apk-v1
-            sdk_url: https://archive.openwrt.org/releases/25.12.1/targets/x86/64/openwrt-sdk-25.12.1-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_version: 25.12.1
             output_extensions: apk ipk
             required_extension: apk
             artifact_suffix: apk
@@ -80,8 +78,9 @@ jobs:
         with:
           package-name: ${{ env.PACKAGE_NAME }}
           package-dir: ${{ env.PACKAGE_DIR }}
-          sdk-url: ${{ matrix.sdk_url }}
-          sdk-cache-key: ${{ matrix.sdk_cache_key }}
+          sdk-version: ${{ matrix.sdk_version }}
+          sdk-target: x86
+          sdk-subtarget: "64"
           output-extensions: ${{ matrix.output_extensions }}
           required-extension: ${{ matrix.required_extension }}
           feeds-update: packages luci
