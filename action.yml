@@ -157,7 +157,12 @@ runs:
         set -euo pipefail
         src_dir="${{ inputs.package-dir }}"
         if [ -z "$src_dir" ]; then
-          src_dir="${{ inputs.package-name }}"
+          if [ -d "$GITHUB_WORKSPACE/${{ inputs.package-name }}" ]; then
+            src_dir="${{ inputs.package-name }}"
+          else
+            # Package files are at the repo root
+            src_dir="."
+          fi
         fi
 
         if [ ! -d "$GITHUB_WORKSPACE/$src_dir" ]; then
