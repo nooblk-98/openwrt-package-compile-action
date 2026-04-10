@@ -1,0 +1,187 @@
+name: OpenWrt Package Builder
+description: Build an OpenWrt package from a local package directory using the OpenWrt SDK.
+author: lahiru
+
+branding:
+  icon: package
+  color: green
+
+inputs:
+  package-name:
+    description: OpenWrt package name (for example luci-app-3ginfo-lite)
+    required: true
+  package-dir:
+    description: Relative path to the package directory in the caller repository
+    required: true
+  sdk-url:
+    description: Full OpenWrt SDK tar.zst URL
+    required: true
+  sdk-cache-key:
+    description: Cache key suffix for SDK reuse
+    required: true
+  output-extensions:
+    description: Space-separated package extensions to collect
+    required: false
+    default: ipk
+  required-extension:
+    description: Required extension that must exist, or the action fails
+    required: false
+    default: ipk
+  feeds-update:
+    description: Space-separated feeds to update
+    required: false
+    default: packages luci
+  feeds-install:
+    description: Space-separated feed packages to install
+    required: false
+    default: comgt sms-tool
+  feeds-install-all-from:
+    description: Space-separated feeds to install all packages from (for example luci)
+    required: false
+    default: luci
+  artifact-name:
+    description: Uploaded artifact name
+    required: false
+    default: openwrt-package
+  upload-artifact:
+    description: Whether to upload artifact via actions/upload-artifact
+    required: false
+    default: "true"
+  retention-days:
+    description: Artifact retention days
+    required: false
+    default: "14"
+  make-jobs:
+    description: Parallel jobs for make (uses nproc when empty)
+    required: false
+    default: ""
+
+outputs:
+  artifact-dir:
+    description: Directory containing produced package files
+    value: ${{ steps.paths.outputs.artifact_dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set internal paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "sdk_dir=$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}" >> "$GITHUB_OUTPUT"
+        echo "artifact_dir=$RUNNER_TEMP/openwrt-out-${{ inputs.sdk-cache-key }}" >> "$GITHUB_OUTPUT"
+
+    - name: Install build dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          ca-certificates \
+          file \
+          gawk \
+          gettext \
+          git \
+          libncurses5-dev \
+          libssl-dev \
+          python3 \
+          rsync \
+          unzip \
+          wget \
+          zstd
+
+    - name: Restore SDK cache
+      id: cache-sdk
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.paths.outputs.sdk_dir }}
+        key: openwrt-sdk-${{ inputs.sdk-cache-key }}
+
+    - name: Download SDK
+      if: steps.cache-sdk.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        wget -q "${{ inputs.sdk-url }}" -O "$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}.tar.zst"
+        mkdir -p "${{ steps.paths.outputs.sdk_dir }}"
+        tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk-${{ inputs.sdk-cache-key }}.tar.zst" \
+          -C "${{ steps.paths.outputs.sdk_dir }}" --strip-components=1
+
+    - name: Update feeds
+      shell: bash
+      working-directory: ${{ steps.paths.outputs.sdk_dir }}
+      run: |
+        set -euo pipefail
+        for feed in ${{ inputs.feeds-update }}; do
+          ./scripts/feeds update "$feed"
+        done
+
+        if [ -n "${{ inputs.feeds-install-all-from }}" ]; then
+          for feed in ${{ inputs.feeds-install-all-from }}; do
+            ./scripts/feeds install -a -p "$feed"
+          done
+        fi
+
+        if [ -n "${{ inputs.feeds-install }}" ]; then
+          ./scripts/feeds install ${{ inputs.feeds-install }}
+        fi
+
+    - name: Stage local package
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ steps.paths.outputs.sdk_dir }}/package/${{ inputs.package-name }}"
+        rsync -a --delete \
+          "$GITHUB_WORKSPACE/${{ inputs.package-dir }}/" \
+          "${{ steps.paths.outputs.sdk_dir }}/package/${{ inputs.package-name }}/"
+
+    - name: Configure SDK
+      shell: bash
+      working-directory: ${{ steps.paths.outputs.sdk_dir }}
+      run: |
+        set -euo pipefail
+        cat > .config <<EOF
+        CONFIG_ALL_NONSHARED=n
+        CONFIG_ALL_KMODS=n
+        CONFIG_ALL=n
+        CONFIG_AUTOREMOVE=n
+        CONFIG_PACKAGE_${{ inputs.package-name }}=m
+        EOF
+        make defconfig
+
+    - name: Build package
+      shell: bash
+      working-directory: ${{ steps.paths.outputs.sdk_dir }}
+      run: |
+        set -euo pipefail
+        jobs="${{ inputs.make-jobs }}"
+        if [ -z "$jobs" ]; then
+          jobs="$(nproc)"
+        fi
+
+        make package/${{ inputs.package-name }}/clean || true
+        make package/${{ inputs.package-name }}/compile -j"$jobs" \
+          || make package/${{ inputs.package-name }}/compile -j1
+
+    - name: Collect package files
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/scripts/collect_package_files.py" \
+          --sdk-dir "${{ steps.paths.outputs.sdk_dir }}" \
+          --pkg-name "${{ inputs.package-name }}" \
+          --output-dir "${{ steps.paths.outputs.artifact_dir }}" \
+          --extensions ${{ inputs.output-extensions }} \
+          --required-ext "${{ inputs.required-extension }}" \
+          --label "${{ inputs.package-name }}"
+
+    - name: Upload artifact
+      if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.paths.outputs.artifact_dir }}/*
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}

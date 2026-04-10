@@ -1,33 +1,35 @@
-name: Build and Publish OpenWrt Package
+name: Example - Build and Release via Reusable Action
 
 on:
   workflow_dispatch:
 
   pull_request:
     paths:
-      - ".github/workflows/publish_marketplace.yml"
+      - "action.yml"
       - "scripts/**"
+      - ".github/workflows/publish_marketplace.yml"
       - "luci-app-3ginfo-lite/**"
 
   push:
     branches:
-      - "main"
-      - "master"
+      - main
+      - master
     paths:
-      - ".github/workflows/publish_marketplace.yml"
+      - "action.yml"
       - "scripts/**"
+      - ".github/workflows/publish_marketplace.yml"
       - "luci-app-3ginfo-lite/**"
-
-concurrency:
-  group: openwrt-package-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: write
 
+concurrency:
+  group: openwrt-reusable-action-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  OWRT_PKG_NAME: luci-app-3ginfo-lite
-  REPO_PKG_DIR: luci-app-3ginfo-lite
+  PACKAGE_NAME: luci-app-3ginfo-lite
+  PACKAGE_DIR: luci-app-3ginfo-lite
 
 jobs:
   meta:
@@ -45,7 +47,7 @@ jobs:
         id: meta
         run: |
           python3 scripts/read_package_meta.py \
-            --makefile "$REPO_PKG_DIR/Makefile" \
+            --makefile "$PACKAGE_DIR/Makefile" \
             --github-output "$GITHUB_OUTPUT"
 
   build:
@@ -57,108 +59,39 @@ jobs:
       matrix:
         include:
           - label: IPK (OpenWrt 24.10.5)
-            sdk_version: 24.10.5
+            sdk_cache_key: 24.10.5-x86-64-ipk-v1
             sdk_url: https://archive.openwrt.org/releases/24.10.5/targets/x86/64/openwrt-sdk-24.10.5-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
-            output_exts: ipk
-            required_ext: ipk
+            output_extensions: ipk
+            required_extension: ipk
             artifact_suffix: ipk
           - label: APK (OpenWrt 25.12.1)
-            sdk_version: 25.12.1
+            sdk_cache_key: 25.12.1-x86-64-apk-v1
             sdk_url: https://archive.openwrt.org/releases/25.12.1/targets/x86/64/openwrt-sdk-25.12.1-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-            output_exts: apk ipk
-            required_ext: apk
+            output_extensions: apk ipk
+            required_extension: apk
             artifact_suffix: apk
-
-    env:
-      SDK_DIR: ${{ github.workspace }}/openwrt-sdk-${{ matrix.artifact_suffix }}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            ca-certificates \
-            file \
-            gawk \
-            gettext \
-            git \
-            libncurses5-dev \
-            libssl-dev \
-            python3 \
-            rsync \
-            unzip \
-            wget \
-            zstd
-
-      - name: Restore OpenWrt SDK cache
-        id: cache-sdk
-        uses: actions/cache@v4
+      - name: Build with reusable action
+        uses: ./
         with:
-          path: ${{ env.SDK_DIR }}
-          key: openwrt-sdk-${{ matrix.sdk_version }}-x86-64-${{ matrix.artifact_suffix }}-v1
-
-      - name: Download OpenWrt SDK
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
-        run: |
-          wget -q "${{ matrix.sdk_url }}" -O "$RUNNER_TEMP/openwrt-sdk-${{ matrix.artifact_suffix }}.tar.zst"
-          mkdir -p "$SDK_DIR"
-          tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk-${{ matrix.artifact_suffix }}.tar.zst" -C "$SDK_DIR" --strip-components=1
-
-      - name: Update required feeds
-        working-directory: ${{ env.SDK_DIR }}
-        run: |
-          ./scripts/feeds update packages luci
-          ./scripts/feeds install -a -p luci
-          ./scripts/feeds install comgt sms-tool
-
-      - name: Stage local package
-        run: |
-          mkdir -p "$SDK_DIR/package/$OWRT_PKG_NAME"
-          rsync -a --delete "$GITHUB_WORKSPACE/$REPO_PKG_DIR/" "$SDK_DIR/package/$OWRT_PKG_NAME/"
-
-      - name: Configure SDK
-        working-directory: ${{ env.SDK_DIR }}
-        run: |
-          cat > .config <<EOF
-          CONFIG_ALL_NONSHARED=n
-          CONFIG_ALL_KMODS=n
-          CONFIG_ALL=n
-          CONFIG_AUTOREMOVE=n
-          CONFIG_PACKAGE_${OWRT_PKG_NAME}=m
-          EOF
-          make defconfig
-
-      - name: Build package only
-        working-directory: ${{ env.SDK_DIR }}
-        run: |
-          make package/$OWRT_PKG_NAME/clean || true
-          make package/$OWRT_PKG_NAME/compile -j"$(nproc)" \
-            || make package/$OWRT_PKG_NAME/compile -j1
-
-      - name: Collect package files
-        run: |
-          python3 scripts/collect_package_files.py \
-            --sdk-dir "$SDK_DIR" \
-            --pkg-name "$OWRT_PKG_NAME" \
-            --output-dir "$RUNNER_TEMP/out-${{ matrix.artifact_suffix }}" \
-            --extensions ${{ matrix.output_exts }} \
-            --required-ext "${{ matrix.required_ext }}" \
-            --label "${{ matrix.label }}"
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.OWRT_PKG_NAME }}-${{ needs.meta.outputs.pkg_version }}-${{ matrix.artifact_suffix }}
-          path: ${{ runner.temp }}/out-${{ matrix.artifact_suffix }}/*
-          if-no-files-found: error
-          retention-days: 14
+          package-name: ${{ env.PACKAGE_NAME }}
+          package-dir: ${{ env.PACKAGE_DIR }}
+          sdk-url: ${{ matrix.sdk_url }}
+          sdk-cache-key: ${{ matrix.sdk_cache_key }}
+          output-extensions: ${{ matrix.output_extensions }}
+          required-extension: ${{ matrix.required_extension }}
+          feeds-update: packages luci
+          feeds-install-all-from: luci
+          feeds-install: comgt sms-tool
+          artifact-name: ${{ env.PACKAGE_NAME }}-${{ needs.meta.outputs.pkg_version }}-${{ matrix.artifact_suffix }}
+          upload-artifact: "true"
 
   release:
-    name: Publish Marketplace Release
+    name: Publish Release
     runs-on: ubuntu-latest
     needs:
       - meta
@@ -180,9 +113,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.meta.outputs.release_tag }}
-          name: ${{ env.OWRT_PKG_NAME }} ${{ needs.meta.outputs.pkg_version }}
+          name: ${{ env.PACKAGE_NAME }} ${{ needs.meta.outputs.pkg_version }}
           body: |
-            Automated package build for `${{ env.OWRT_PKG_NAME }}`.
+            Example release generated by the reusable action.
 
             Source commit: `${{ github.sha }}`
             Included outputs: `ipk` and `apk` (when produced by SDK).
