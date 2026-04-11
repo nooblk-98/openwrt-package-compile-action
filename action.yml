@@ -44,7 +44,7 @@ inputs:
   feeds-install-all-from:
     description: Space-separated feeds to install all packages from (for example luci)
     required: false
-    default: luci
+    default: ""
   artifact-name:
     description: Uploaded artifact name
     required: false
@@ -175,6 +175,13 @@ runs:
         rsync -a --delete \
           "$GITHUB_WORKSPACE/$src_dir/" \
           "${{ steps.paths.outputs.sdk_dir }}/package/${{ inputs.package-name }}/"
+
+    - name: Install package into feeds
+      shell: bash
+      working-directory: ${{ steps.paths.outputs.sdk_dir }}
+      run: |
+        set -euo pipefail
+        ./scripts/feeds install "${{ inputs.package-name }}"
 
     - name: Configure SDK
       shell: bash
