@@ -181,13 +181,13 @@ runs:
       working-directory: ${{ steps.paths.outputs.sdk_dir }}
       run: |
         set -euo pipefail
-        cat > .config <<EOF
-        CONFIG_ALL_NONSHARED=n
-        CONFIG_ALL_KMODS=n
-        CONFIG_ALL=n
-        CONFIG_AUTOREMOVE=n
-        CONFIG_PACKAGE_${{ inputs.package-name }}=m
-        EOF
+        printf '%s\n' \
+          'CONFIG_ALL_NONSHARED=n' \
+          'CONFIG_ALL_KMODS=n' \
+          'CONFIG_ALL=n' \
+          'CONFIG_AUTOREMOVE=n' \
+          "CONFIG_PACKAGE_${{ inputs.package-name }}=m" \
+          > .config
         make defconfig
 
     - name: Build package
