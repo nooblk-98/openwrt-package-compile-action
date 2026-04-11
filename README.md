@@ -101,7 +101,7 @@ jobs:
     name: Publish Release
     runs-on: ubuntu-latest
     needs: [meta, build]
-    if: github.event_name == 'push'
+    if: always() && needs.build.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -113,6 +113,7 @@ jobs:
           name: your-package-name ${{ needs.meta.outputs.release_tag }}
           files: ${{ runner.temp }}/release-files/*
           fail_on_unmatched_files: true
+          overwrite: true
 ```
 
 > Replace `your-package-name` with your actual package name.  
