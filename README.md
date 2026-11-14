@@ -8,40 +8,59 @@
 
 Build OpenWrt `.ipk` and `.apk` packages in GitHub Actions with the official OpenWrt SDK.
 
-[Quick start](#quick-start) • [Publish on release](#publish-packages-on-release) • [Inputs](#inputs) • [SDK versions](#sdk-versions) • [Tips](#tips)
+[Quick start](#quick-start) • [How it works](#how-it-works) • [Examples](#examples) • [Inputs](#inputs) • [SDK versions](#sdk-versions) • [Troubleshooting](#troubleshooting)
 
 </div>
 
 ---
 
-Point the action at a package directory in your repository and it does the rest:
+Point the action at a package directory in your repository. It downloads the matching OpenWrt SDK, compiles only your package, and hands you the `.ipk` / `.apk` files as a workflow artifact. No Docker image or self-hosted runner is needed.
 
-- Downloads the OpenWrt SDK for your version and target, and caches it between runs
-- Updates the feeds and resolves your package's dependencies
-- Compiles only your package
-- Collects the `.ipk` / `.apk` files and uploads them as a workflow artifact
-
-The package format follows the SDK: OpenWrt 25.x and newer produce `.apk`, older releases produce `.ipk`.
+- **Zero setup:** just give it a package name and an OpenWrt release.
+- **Fast reruns:** the SDK is cached between workflow runs.
+- **Any target:** build for `x86/64`, `ath79`, `ramips`, `mediatek` or any other target OpenWrt publishes an SDK for.
+- **Both package formats:** OpenWrt 25.x and newer produce `.apk`, while older releases produce `.ipk`.
 
 ## Quick start
 
-```yaml
-- uses: actions/checkout@v4
+Add a workflow such as `.github/workflows/build.yml` to your package repository:
 
-- uses: nooblk-98/openwrt-package-compile-action@v1
-  with:
-    package-name: luci-app-example
-    sdk-version: 24.10.5
+```yaml
+name: Build package
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: nooblk-98/openwrt-package-compile-action@v1
+        with:
+          package-name: luci-app-example
+          sdk-version: 24.10.5
 ```
 
-The built package is uploaded as the `openwrt-package` artifact.
+When the run finishes, download the built package from the `openwrt-package` artifact on the run's summary page.
 
 > [!TIP]
-> If your package is in a subdirectory, set `package-dir`. Otherwise the action looks for a folder named after `package-name`, then falls back to the repository root.
+> The action looks for your package in a folder named after `package-name`, then falls back to the repository root. If it lives somewhere else, set `package-dir` (for example `package-dir: packages/luci-app-example`).
 
-## Publish packages on release
+## How it works
 
-This workflow builds both formats whenever you publish a GitHub release and attaches the packages to it. Save it as `.github/workflows/release.yml`:
+1. **Resolve the SDK.** Finds the SDK tarball for `sdk-version`, `sdk-target` and `sdk-subtarget` on [archive.openwrt.org](https://archive.openwrt.org/releases/), picking the newest GCC build when there are several.
+2. **Prepare the runner.** Installs the build dependencies. On Ubuntu 25.10+ runners it switches back to GNU coreutils, because the SDK rejects the default Rust coreutils.
+3. **Restore or download the SDK.** Uses `actions/cache`, keyed by SDK file name.
+4. **Update feeds.** Each feed in `feeds-update` is cloned fresh, so a stale cached feed never breaks the build. The packages in `feeds-install` and `feeds-install-all-from` are then installed.
+5. **Build.** Copies your package into the SDK, enables only that package, and runs `make package/<name>/compile`.
+6. **Collect.** Gathers the produced `.ipk` / `.apk` files and uploads them as an artifact.
+
+## Examples
+
+### Publish packages on release
+
+Build both formats whenever you publish a GitHub release, and attach the files to it:
 
 ```yaml
 name: Build and publish packages
@@ -89,38 +108,77 @@ jobs:
 ```
 
 > [!NOTE]
-> Releases created with the default `GITHUB_TOKEN` do not trigger other workflows. Create releases from the GitHub UI, the `gh` CLI, or with a personal access token.
+> Releases created with the default `GITHUB_TOKEN` don't trigger other workflows. Create the release from the GitHub UI, the `gh` CLI, or with a personal access token.
 
-For a real-world example, see [luci-app-wban](https://github.com/nooblk-98/luci-app-wban/blob/main/.github/workflows/release.yml).
+For a real-world setup, see [luci-app-wban](https://github.com/nooblk-98/luci-app-wban/blob/main/.github/workflows/release.yml).
+
+### Build a compiled package for several targets
+
+Packages that contain native code need one build per target:
+
+```yaml
+strategy:
+  matrix:
+    include:
+      - { target: x86,      subtarget: '64' }
+      - { target: ath79,    subtarget: generic }
+      - { target: ramips,   subtarget: mt7621 }
+      - { target: mediatek, subtarget: filogic }
+steps:
+  - uses: actions/checkout@v4
+  - uses: nooblk-98/openwrt-package-compile-action@v1
+    with:
+      package-name: my-daemon
+      sdk-version: 24.10.5
+      sdk-target: ${{ matrix.target }}
+      sdk-subtarget: ${{ matrix.subtarget }}
+      feeds-install: ""
+      artifact-name: my-daemon-${{ matrix.target }}-${{ matrix.subtarget }}
+```
+
+### Use the built files in a later step
+
+Skip the artifact upload and work with the files directly through the `artifact-dir` output:
+
+```yaml
+- uses: nooblk-98/openwrt-package-compile-action@v1
+  id: build
+  with:
+    package-name: luci-app-example
+    sdk-version: 24.10.5
+    upload-artifact: false
+
+- run: ls -l "${{ steps.build.outputs.artifact-dir }}"
+```
 
 ## Inputs
 
 | Input | Default | Description |
 |---|---|---|
-| `package-name` | **required** | OpenWrt package name, for example `luci-app-example` |
-| `sdk-version` | **required** | OpenWrt release, for example `24.10.5` |
-| `package-dir` | `""` | Package directory in your repository |
-| `sdk-target` | `x86` | SDK target, for example `ath79` or `ramips` |
-| `sdk-subtarget` | `64` | SDK subtarget, for example `generic` or `mt7621` |
-| `sdk-url-override` | `""` | Explicit SDK tarball URL (skips auto-detection) |
-| `sdk-cache-key-override` | `""` | Explicit SDK cache key |
-| `feeds-update` | `base packages luci` | Feeds to update |
-| `feeds-install` | `comgt sms-tool` | Extra feed packages to install before building |
-| `feeds-install-all-from` | `""` | Feeds to install every package from, for example `luci` |
-| `artifact-name` | `openwrt-package` | Name of the uploaded artifact |
-| `upload-artifact` | `true` | Set to `false` to skip the artifact upload |
-| `retention-days` | `14` | Artifact retention in days |
-| `make-jobs` | `""` | Parallel make jobs (defaults to `nproc`) |
+| `package-name` | **required** | OpenWrt package name, for example `luci-app-example`. |
+| `sdk-version` | **required** | OpenWrt release, for example `24.10.5`. |
+| `package-dir` | `""` | Package directory in your repository. If empty, the action uses `<package-name>/` when it exists, otherwise the repository root. |
+| `sdk-target` | `x86` | SDK target, for example `ath79` or `ramips`. |
+| `sdk-subtarget` | `64` | SDK subtarget, for example `generic` or `mt7621`. |
+| `sdk-url-override` | `""` | Explicit SDK tarball URL, which skips auto-detection. Use it for snapshots or mirrors. |
+| `sdk-cache-key-override` | `""` | Explicit SDK cache key. |
+| `feeds-update` | `base packages luci` | Feeds to update. |
+| `feeds-install` | `comgt sms-tool` | Extra feed packages to install before building. Set it to `""` if you don't need them. |
+| `feeds-install-all-from` | `""` | Feeds to install every package from, for example `luci`. |
+| `artifact-name` | `openwrt-package` | Name of the uploaded artifact. |
+| `upload-artifact` | `true` | Set to `false` to skip the artifact upload. |
+| `retention-days` | `14` | Artifact retention in days. |
+| `make-jobs` | `""` | Number of parallel make jobs (defaults to `nproc`). |
 
 ### Outputs
 
 | Output | Description |
 |---|---|
-| `artifact-dir` | Absolute path to the built package files on the runner |
+| `artifact-dir` | Absolute path to the built package files on the runner. |
 
 ## SDK versions
 
-Any release listed at [downloads.openwrt.org/releases](https://downloads.openwrt.org/releases/) can be used as `sdk-version`.
+Any release listed at [archive.openwrt.org/releases](https://archive.openwrt.org/releases/) works as `sdk-version`.
 
 | Version | Package format |
 |---|---|
@@ -128,9 +186,14 @@ Any release listed at [downloads.openwrt.org/releases](https://downloads.openwrt
 | `24.10.x` | `.ipk` |
 | `23.05.x` | `.ipk` |
 
-## Tips
+The action runs on `ubuntu-24.04` and `ubuntu-latest` (26.04) runners.
 
-- **Architecture-independent packages** (LuCI apps, scripts, `PKGARCH:=all`) only need one build per format. The default `x86/64` target is fine.
-- **Compiled packages** need one build per target. Add `sdk-target` and `sdk-subtarget` to your matrix.
-- **Missing dependencies?** Make sure the feed that provides them is listed in `feeds-update`.
-- Works on both `ubuntu-24.04` and `ubuntu-latest` (26.04) runners.
+> [!TIP]
+> Architecture-independent packages (LuCI apps, shell scripts, `PKGARCH:=all`) only need one build per package format, and the default `x86/64` target is fine for them.
+
+## Troubleshooting
+
+- **`Failed to fetch SDK index`:** check that the version, target and subtarget exist on the archive. For snapshots or custom builds, use `sdk-url-override`.
+- **Missing dependency:** add the feed that provides it to `feeds-update`, and add the package itself to `feeds-install`.
+- **Build failure with little output:** when the parallel build fails, the action retries with `-j1 V=s`, so the end of the log shows the full compiler output.
+- **`No .ipk or .apk package was produced`:** make sure `package-name` matches the `PKG_NAME` in your package's `Makefile`. The action lists the files in the SDK's `bin/packages/` directory to help you check.
