@@ -36,7 +36,7 @@ inputs:
   feeds-update:
     description: Space-separated feeds to update
     required: false
-    default: packages luci
+    default: base packages luci
   feeds-install:
     description: Space-separated feed packages to install
     required: false
@@ -115,6 +115,15 @@ runs:
           libjson-c-dev \
           perl
 
+        # Ubuntu 25.10+ ships Rust coreutils (uutils) by default, which the
+        # OpenWrt SDK prerequisite check rejects. Switch back to GNU coreutils.
+        if ! install --version 2>/dev/null | grep -q 'GNU coreutils'; then
+          echo "Non-GNU coreutils detected, installing coreutils-from-gnu"
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+          hash -r
+        fi
+        install --version | head -n1
+
     - name: Restore SDK cache
       id: cache-sdk
       uses: actions/cache@v4
@@ -138,6 +147,9 @@ runs:
       run: |
         set -euo pipefail
         for feed in ${{ inputs.feeds-update }}; do
+          # A cached SDK may hold a feed checked out at a tag (detached HEAD),
+          # which 'feeds update' cannot pull. Start each feed fresh.
+          rm -rf "feeds/$feed" "feeds/$feed.tmp" "feeds/$feed.index" "feeds/$feed.targetindex"
           ./scripts/feeds update "$feed"
         done
 
